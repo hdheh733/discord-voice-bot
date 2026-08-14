@@ -41,12 +41,22 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
+# إعدادات متقدمة لتجاوز حظر يوتيوب للسيرفرات السحابية
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
     'default_search': 'ytsearch',
     'source_address': '0.0.0.0',
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'no_warnings': True,
+    'user_agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
+        ' like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ),
+    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
 }
 
 FFMPEG_OPTIONS = {
