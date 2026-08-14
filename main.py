@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 from threading import Thread
 import discord
 from discord.ext import commands
@@ -35,14 +36,17 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-# إزالة أمر help المدمج لمنع التعارض
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
+
+# البحث عن المسار الصحيح لـ ffmpeg
+FFMPEG_EXE = shutil.which('ffmpeg') or 'ffmpeg'
 
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'default_search': 'auto',
+    'default_search': 'ytsearch',
+    'source_address': '0.0.0.0',
 }
 
 FFMPEG_OPTIONS = {
@@ -58,6 +62,7 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 @bot.event
 async def on_ready():
   print(f'Logged in as {bot.user.name} ({bot.user.id})')
+  print(f'FFmpeg location: {FFMPEG_EXE}')
   print('Bot is ready and online!')
 
 
@@ -106,7 +111,7 @@ async def play(ctx, *, query: str):
   channel = ctx.author.voice.channel
 
   if ctx.voice_client is None:
-    vc = await channel.connect(cls=discord.FFmpegPCMAudio)
+    vc = await channel.connect()
   else:
     vc = ctx.voice_client
 
@@ -116,22 +121,30 @@ async def play(ctx, *, query: str):
   else:
     await ctx.send('🔍 جاري البحث وجلب الصوت...')
     loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(
-        None, lambda: ytdl.extract_info(query, download=False)
-    )
+    try:
+      data = await loop.run_in_executor(
+          None, lambda: ytdl.extract_info(query, download=False)
+      )
+      if 'entries' in data and len(data['entries']) > 0:
+        data = data['entries'][0]
 
-    if 'entries' in data:
-      data = data['entries'][0]
-
-    source_url = data['url']
-    title = data.get('title', 'صوت من الإنترنت')
+      source_url = data['url']
+      title = data.get('title', 'صوت من الإنترنت')
+    except Exception as e:
+      await ctx.send(f'❌ حدث خطأ أثناء البحث: {e}')
+      return
 
   if vc.is_playing() or vc.is_paused():
     vc.stop()
 
-  player = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
-  vc.play(player)
-  await ctx.send(f'🎵 جاري تشغيل: **{title}**')
+  try:
+    player = discord.FFmpegPCMAudio(
+        source_url, executable=FFMPEG_EXE, **FFMPEG_OPTIONS
+    )
+    vc.play(player)
+    await ctx.send(f'🎵 جاري تشغيل: **{title}**')
+  except Exception as e:
+    await ctx.send(f'❌ خطأ في تشغيل الصوت: {e}')
 
 
 # --- 2. أمر الإيقاف المؤقت ---
