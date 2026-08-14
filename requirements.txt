@@ -2,4 +2,3 @@ discord.py
 PyNaCl
 davey
 Flask
-gunicorn
