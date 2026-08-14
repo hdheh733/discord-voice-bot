@@ -4,11 +4,7 @@ from threading import Thread
 import discord
 from discord.ext import commands
 from flask import Flask
-import static_ffmpeg
 import yt_dlp
-
-# --- تثبيت واستخراج مسار ffmpeg تلقائياً ---
-static_ffmpeg.add_paths()
 
 # --- سيرفر الويب الخلفي لإبقاء البوت متصلاً 24/7 ---
 app = Flask('')
@@ -41,7 +37,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-# إعدادات متقدمة لتجاوز حظر يوتيوب للسيرفرات السحابية
+# إعدادات الاستخراج المحسّنة
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
