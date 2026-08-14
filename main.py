@@ -35,10 +35,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-# الـ Prefix هنا هو > لمنع التعارض مع أي بوت آخر
 bot = commands.Bot(command_prefix='>', intents=intents)
 
-# إعدادات تشغيل اليوتيوب والساوند كلاود
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -62,7 +60,42 @@ async def on_ready():
   print('Bot is ready and online!')
 
 
-# --- 1. أمر التشغيل (يشغل ملفات مسجلة أو روابط يوتيوب وساوند كلاود) ---
+# --- أمر عرض قائمة الأوامر في الشات ---
+@bot.command(name='help', aliases=['اوامر', 'الأوامر', 'commands'])
+async def help_command(ctx):
+  embed = discord.Embed(
+      title='🎵 قائمة أوامر بوت الصوت',
+      description='استخدم الرمز **`>`** قبل كل أمر:',
+      color=discord.Color.blue(),
+  )
+
+  embed.add_field(
+      name='▶️ `>play <الرابط أو الاسم>`',
+      value='تشغيل مقطع من اليوتيوب، الساوند كلاود، أو ملف محلي.',
+      inline=False,
+  )
+  embed.add_field(
+      name='⏸️ `>pause`', value='إيقاف التشغيل مؤقتاً.', inline=False
+  )
+  embed.add_field(
+      name='▶️ `>resume`', value='استئناف التشغيل بعد الإيقاف المؤقت.', inline=False
+  )
+  embed.add_field(
+      name='⏹️ `>stop`', value='إيقاف الصوت تماماً.', inline=False
+  )
+  embed.add_field(
+      name='👋 `>leave`', value='إخراج البوت من الروم الصوتي.', inline=False
+  )
+  embed.add_field(
+      name='📜 `>help`', value='عرض هذه القائمة من جديد.', inline=False
+  )
+
+  embed.set_footer(text='عمل البوت مستمر 24/7 بدون توقف 🚀')
+
+  await ctx.send(embed=embed)
+
+
+# --- 1. أمر التشغيل ---
 @bot.command()
 async def play(ctx, *, query: str):
   if not ctx.author.voice:
@@ -76,7 +109,6 @@ async def play(ctx, *, query: str):
   else:
     vc = ctx.voice_client
 
-  # التحقق إذا كان الشغل ملف محلي أم رابط/بحث عبر الإنترنت
   if os.path.exists(query):
     source_url = query
     title = query
@@ -101,7 +133,7 @@ async def play(ctx, *, query: str):
   await ctx.send(f'🎵 جاري تشغيل: **{title}**')
 
 
-# --- 2. أمر الإيقاف المؤقت (Pause) ---
+# --- 2. أمر الإيقاف المؤقت ---
 @bot.command()
 async def pause(ctx):
   if ctx.voice_client and ctx.voice_client.is_playing():
@@ -111,7 +143,7 @@ async def pause(ctx):
     await ctx.send('❌ لا يوجد صوت قيد التشغيل حالياً!')
 
 
-# --- 3. أمر الاستئناف (Resume) ---
+# --- 3. أمر الاستئناف ---
 @bot.command()
 async def resume(ctx):
   if ctx.voice_client and ctx.voice_client.is_paused():
@@ -121,7 +153,7 @@ async def resume(ctx):
     await ctx.send('❌ الصوت ليس متوقفاً مؤقتاً!')
 
 
-# --- 4. أمر الإيقاف التام (Stop) ---
+# --- 4. أمر الإيقاف التام ---
 @bot.command()
 async def stop(ctx):
   if ctx.voice_client and (
@@ -133,7 +165,7 @@ async def stop(ctx):
     await ctx.send('❌ لا يوجد صوت قيد التشغيل.')
 
 
-# --- 5. أمر الخروج من الروم (Leave) ---
+# --- 5. أمر الخروج ---
 @bot.command()
 async def leave(ctx):
   if ctx.voice_client:
