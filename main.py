@@ -1,11 +1,14 @@
 import asyncio
 import os
-import shutil
 from threading import Thread
 import discord
 from discord.ext import commands
 from flask import Flask
+import static_ffmpeg
 import yt_dlp
+
+# --- تثبيت واستخراج مسار ffmpeg تلقائياً ---
+static_ffmpeg.add_paths()
 
 # --- سيرفر الويب الخلفي لإبقاء البوت متصلاً 24/7 ---
 app = Flask('')
@@ -38,9 +41,6 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-# البحث عن المسار الصحيح لـ ffmpeg
-FFMPEG_EXE = shutil.which('ffmpeg') or 'ffmpeg'
-
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -62,7 +62,6 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 @bot.event
 async def on_ready():
   print(f'Logged in as {bot.user.name} ({bot.user.id})')
-  print(f'FFmpeg location: {FFMPEG_EXE}')
   print('Bot is ready and online!')
 
 
@@ -138,9 +137,7 @@ async def play(ctx, *, query: str):
     vc.stop()
 
   try:
-    player = discord.FFmpegPCMAudio(
-        source_url, executable=FFMPEG_EXE, **FFMPEG_OPTIONS
-    )
+    player = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
     vc.play(player)
     await ctx.send(f'🎵 جاري تشغيل: **{title}**')
   except Exception as e:
