@@ -2,3 +2,4 @@ discord.py
 PyNaCl
 davey
 Flask
+yt-dlp
