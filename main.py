@@ -4,7 +4,11 @@ from threading import Thread
 import discord
 from discord.ext import commands
 from flask import Flask
+import imageio_ffmpeg
 import yt_dlp
+
+# جلب المسار المباشر لبرنامج ffmpeg المدمج
+FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
 # --- سيرفر الويب الخلفي لإبقاء البوت متصلاً 24/7 ---
 app = Flask('')
@@ -37,7 +41,6 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-# إعدادات YTDL مرنة ومجردة لتفادي حظر Cloudflare بقدر الإمكان
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -64,10 +67,11 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 @bot.event
 async def on_ready():
   print(f'Logged in as {bot.user.name} ({bot.user.id})')
+  print(f'FFmpeg Path: {FFMPEG_PATH}')
   print('Bot is ready and online!')
 
 
-# --- أمر عرض قائمة الأوامر في الشات ---
+# --- أمر عرض قائمة الأوامر ---
 @bot.command(name='help', aliases=['اوامر', 'الأوامر', 'commands'])
 async def help_command(ctx):
   embed = discord.Embed(
@@ -75,7 +79,6 @@ async def help_command(ctx):
       description='استخدم الرمز **`>`** قبل كل أمر:',
       color=discord.Color.blue(),
   )
-
   embed.add_field(
       name='▶️ `>play <الرابط أو الاسم>`',
       value='تشغيل مقطع من اليوتيوب، الساوند كلاود، أو ملف محلي.',
@@ -96,13 +99,11 @@ async def help_command(ctx):
   embed.add_field(
       name='📜 `>help`', value='عرض هذه القائمة من جديد.', inline=False
   )
-
   embed.set_footer(text='عمل البوت مستمر 24/7 بدون توقف 🚀')
-
   await ctx.send(embed=embed)
 
 
-# --- 1. أمر التشغيل ---
+# --- أمر التشغيل ---
 @bot.command()
 async def play(ctx, *, query: str):
   if not ctx.author.voice:
@@ -116,18 +117,19 @@ async def play(ctx, *, query: str):
   else:
     vc = ctx.voice_client
 
-  # التشغيل من ملف محلي موجود بمجلد المشروع
+  # 1. التشغيل من ملف محلي موجود بمجلد المشروع
   if os.path.exists(query):
     if vc.is_playing() or vc.is_paused():
       vc.stop()
     try:
-      vc.play(discord.FFmpegPCMAudio(query))
+      player = discord.FFmpegPCMAudio(query, executable=FFMPEG_PATH)
+      vc.play(player)
       await ctx.send(f'🎵 جاري تشغيل الملف المحلي: **{query}**')
     except Exception as e:
       await ctx.send(f'❌ خطأ أثناء تشغيل الملف المحلي: {e}')
     return
 
-  # التشغيل من رابط أو عبر البحث
+  # 2. التشغيل من رابط أو عبر البحث
   await ctx.send('🔍 جاري البحث وجلب الصوت...')
   loop = asyncio.get_event_loop()
 
@@ -147,13 +149,10 @@ async def play(ctx, *, query: str):
     title = data.get('title', 'صوت من الإنترنت')
 
   except Exception as e:
-    # حماية الكود من الإغلاق التلقائي عند مواجهة Cloudflare أو حظر IP
     await ctx.send(
         '❌ تعذر جلب المقطع بسبب حماية الموقع (Cloudflare/Bot Block).\n'
-        '💡 **حلول مجربة:**\n'
-        '1. جرب البحث باسم المقطع بدل وضع الرابط المباشر.\n'
-        '2. جرب رابط من SoundCloud.\n'
-        '3. ارفع الملف الصوتي كملف محلي على GitHub.'
+        '💡 **جرّب:** البحث باسم المقطع أو استخدام رابط SoundCloud أو ملف'
+        ' محلي.'
     )
     print(f'Extraction Error: {e}')
     return
@@ -162,14 +161,16 @@ async def play(ctx, *, query: str):
     vc.stop()
 
   try:
-    player = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
+    player = discord.FFmpegPCMAudio(
+        source_url, executable=FFMPEG_PATH, **FFMPEG_OPTIONS
+    )
     vc.play(player)
     await ctx.send(f'🎵 جاري تشغيل: **{title}**')
   except Exception as e:
     await ctx.send(f'❌ خطأ في تشغيل الصوت: {e}')
 
 
-# --- 2. أمر الإيقاف المؤقت ---
+# --- الأوامر الأساسية الأُخرى ---
 @bot.command()
 async def pause(ctx):
   if ctx.voice_client and ctx.voice_client.is_playing():
@@ -179,7 +180,6 @@ async def pause(ctx):
     await ctx.send('❌ لا يوجد صوت قيد التشغيل حالياً!')
 
 
-# --- 3. أمر الاستئناف ---
 @bot.command()
 async def resume(ctx):
   if ctx.voice_client and ctx.voice_client.is_paused():
@@ -189,7 +189,6 @@ async def resume(ctx):
     await ctx.send('❌ الصوت ليس متوقفاً مؤقتاً!')
 
 
-# --- 4. أمر الإيقاف التام ---
 @bot.command()
 async def stop(ctx):
   if ctx.voice_client and (
@@ -201,7 +200,6 @@ async def stop(ctx):
     await ctx.send('❌ لا يوجد صوت قيد التشغيل.')
 
 
-# --- 5. أمر الخروج ---
 @bot.command()
 async def leave(ctx):
   if ctx.voice_client:
