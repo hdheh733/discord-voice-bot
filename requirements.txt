@@ -3,4 +3,3 @@ PyNaCl
 davey
 Flask
 yt-dlp
-yt-dlp-ios
