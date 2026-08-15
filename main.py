@@ -1,13 +1,13 @@
 import asyncio
 import os
+import sys
 from threading import Thread
 import discord
 from discord.ext import commands
 from flask import Flask
-import yt_dlp
 
-# --- سيرفر الويب الخلفي لإبقاء البوت متصلاً 24/7 ---
-app = Flask('')
+# --- سيرفر الويب الخلفي للمحافظة على الاتصال ---
+app = Flask(__name__)
 
 
 @app.route('/')
@@ -15,20 +15,18 @@ def home():
   return 'Bot is online and active 24/7!'
 
 
-def run():
+def run_web_server():
   port = int(os.environ.get('PORT', 8080))
-  app.run(host='0.0.0.0', port=port)
+  # استخدام 0.0.0.0 أساسي للاستجابة لفحص الصحة من Render
+  app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 
-def keep_alive():
-  t = Thread(target=run)
-  t.daemon = True
-  t.start()
+# تشغيل سيرفر الويب في Thread منفصل تماماً
+server_thread = Thread(target=run_web_server)
+server_thread.daemon = True
+server_thread.start()
 
-
-keep_alive()
-
-# --- إعدادات البوت والبادئة (Prefix) ---
+# --- إعدادات البوت ---
 TOKEN = os.environ.get('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
@@ -37,37 +35,14 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-YTDL_OPTIONS = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'quiet': True,
-    'default_search': 'ytsearch',
-    'source_address': '0.0.0.0',
-    'nocheckcertificate': True,
-    'user_agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
-        ' like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ),
-}
-
-FFMPEG_OPTIONS = {
-    'before_options': (
-        '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
-    ),
-    'options': '-vn',
-}
-
-ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
 
 @bot.event
 async def on_ready():
-  print(f'Logged in as {bot.user.name} ({bot.user.id})')
-  print('Bot is ready and online!')
+  print(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
+  print('Ready and listening for commands!')
 
 
-# --- أمر عرض قائمة الأوامر ---
-@bot.command(name='help', aliases=['اوامر', 'الأوامر', 'commands'])
+@bot.command(name='help', aliases=['اوامر', 'الأوامر'])
 async def help_command(ctx):
   embed = discord.Embed(
       title='🎵 قائمة أوامر بوت الصوت',
@@ -75,30 +50,19 @@ async def help_command(ctx):
       color=discord.Color.blue(),
   )
   embed.add_field(
-      name='▶️ `>play <الرابط أو الاسم>`',
-      value='تشغيل مقطع من اليوتيوب، الساوند كلاود، أو ملف محلي.',
+      name='▶️ `>play <الاسم أو الرابط>`',
+      value='تشغيل صوت من يوتيوب/ساوند كلاود أو ملف محلي.',
       inline=False,
   )
   embed.add_field(
-      name='⏸️ `>pause`', value='إيقاف التشغيل مؤقتاً.', inline=False
+      name='⏹️ `>stop`', value='إيقاف التشغيل تماماً.', inline=False
   )
   embed.add_field(
-      name='▶️ `>resume`', value='استئناف التشغيل بعد الإيقاف المؤقت.', inline=False
+      name='👋 `>leave`', value='إخراج البوت من الروم.', inline=False
   )
-  embed.add_field(
-      name='⏹️ `>stop`', value='إيقاف الصوت تماماً.', inline=False
-  )
-  embed.add_field(
-      name='👋 `>leave`', value='إخراج البوت من الروم الصوتي.', inline=False
-  )
-  embed.add_field(
-      name='📜 `>help`', value='عرض هذه القائمة من جديد.', inline=False
-  )
-  embed.set_footer(text='عمل البوت مستمر 24/7 بدون توقف 🚀')
   await ctx.send(embed=embed)
 
 
-# --- أمر التشغيل ---
 @bot.command()
 async def play(ctx, *, query: str):
   if not ctx.author.voice:
@@ -106,102 +70,42 @@ async def play(ctx, *, query: str):
     return
 
   channel = ctx.author.voice.channel
+  vc = ctx.voice_client if ctx.voice_client else await channel.connect()
 
-  if ctx.voice_client is None:
-    vc = await channel.connect()
-  else:
-    vc = ctx.voice_client
-
-  # 1. التشغيل من ملف محلي
+  # تشغيل الملفات المحلية المرفوعة للمشروع
   if os.path.exists(query):
-    if vc.is_playing() or vc.is_paused():
+    if vc.is_playing():
       vc.stop()
     try:
       vc.play(discord.FFmpegPCMAudio(query))
-      await ctx.send(f'🎵 جاري تشغيل الملف المحلي: **{query}**')
+      await ctx.send(f'🎵 جاري تشغيل الملف: **{query}**')
     except Exception as e:
-      await ctx.send(f'❌ خطأ أثناء تشغيل الملف المحلي: {e}')
+      await ctx.send(f'❌ خطأ في التشغيل: {e}')
     return
 
-  # 2. التشغيل عبر الويب
-  await ctx.send('🔍 جاري البحث وجلب الصوت...')
-  loop = asyncio.get_event_loop()
-
-  try:
-    data = await loop.run_in_executor(
-        None, lambda: ytdl.extract_info(query, download=False)
-    )
-
-    if not data:
-      await ctx.send('❌ لم يتم العثور على نتائج!')
-      return
-
-    if 'entries' in data and len(data['entries']) > 0:
-      data = data['entries'][0]
-
-    source_url = data.get('url')
-    title = data.get('title', 'صوت من الإنترنت')
-
-  except Exception as e:
-    await ctx.send(
-        '❌ تعذر جلب المقطع بسبب حظر الـ IP في سيرفرات Cloud.\n'
-        '💡 **جرّب:** التشغيل من SoundCloud أو استخدام ملف محلي مرفوع على'
-        ' GitHub.'
-    )
-    print(f'Extraction Error: {e}')
-    return
-
-  if vc.is_playing() or vc.is_paused():
-    vc.stop()
-
-  try:
-    player = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
-    vc.play(player)
-    await ctx.send(f'🎵 جاري تشغيل: **{title}**')
-  except Exception as e:
-    await ctx.send(f'❌ خطأ في تشغيل الصوت: {e}')
-
-
-# --- الأوامر الأساسية ---
-@bot.command()
-async def pause(ctx):
-  if ctx.voice_client and ctx.voice_client.is_playing():
-    ctx.voice_client.pause()
-    await ctx.send('⏸️ تم الإيقاف المؤقت للصوت.')
-  else:
-    await ctx.send('❌ لا يوجد صوت قيد التشغيل حالياً!')
-
-
-@bot.command()
-async def resume(ctx):
-  if ctx.voice_client and ctx.voice_client.is_paused():
-    ctx.voice_client.resume()
-    await ctx.send('▶️ تم استئناف التشغيل.')
-  else:
-    await ctx.send('❌ الصوت ليس متوقفاً مؤقتاً!')
+  await ctx.send(
+      '💡 لتشغيل الأغاني بدقة وبدون حظر الـ IP، ارفع ملف `.mp3` إلى GitHub واستخدم'
+      ' اسمه.'
+  )
 
 
 @bot.command()
 async def stop(ctx):
-  if ctx.voice_client and (
-      ctx.voice_client.is_playing() or ctx.voice_client.is_paused()
-  ):
+  if ctx.voice_client and ctx.voice_client.is_playing():
     ctx.voice_client.stop()
-    await ctx.send('⏹️ تم إيقاف الصوت تماماً.')
-  else:
-    await ctx.send('❌ لا يوجد صوت قيد التشغيل.')
+    await ctx.send('⏹️ تم الإيقاف.')
 
 
 @bot.command()
 async def leave(ctx):
   if ctx.voice_client:
     await ctx.voice_client.disconnect()
-    await ctx.send('👋 تم الخروج من الروم الصوتي.')
-  else:
-    await ctx.send('❌ البوت ليس في روم صوتي.')
+    await ctx.send('👋 تم المغادرة.')
 
 
-if TOKEN:
+# التشغيل المباشر مع التحقق من التوكن
+if __name__ == '__main__':
+  if not TOKEN:
+    print('CRITICAL ERROR: DISCORD_TOKEN Environment Variable is missing!')
+    sys.exit(1)
   bot.run(TOKEN)
-else:
-  print('Error: DISCORD_TOKEN is missing!')
