@@ -37,7 +37,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-# إعدادات YTDL بعد التعديل والتنظيف
+# إعدادات YTDL مرنة ومجردة لتفادي حظر Cloudflare بقدر الإمكان
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -46,7 +46,8 @@ YTDL_OPTIONS = {
     'source_address': '0.0.0.0',
     'nocheckcertificate': True,
     'user_agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
+        ' like Gecko) Chrome/120.0.0.0 Safari/537.36'
     ),
 }
 
@@ -101,7 +102,7 @@ async def help_command(ctx):
   await ctx.send(embed=embed)
 
 
-# --- 1. أمر التشغيل (للملفات المحلية أو الصوت عبر الإنترنت) ---
+# --- 1. أمر التشغيل ---
 @bot.command()
 async def play(ctx, *, query: str):
   if not ctx.author.voice:
@@ -115,7 +116,7 @@ async def play(ctx, *, query: str):
   else:
     vc = ctx.voice_client
 
-  # إذا كان إدخال المستخدم اسم ملف محلي موجود بمجلد البوت
+  # التشغيل من ملف محلي موجود بمجلد المشروع
   if os.path.exists(query):
     if vc.is_playing() or vc.is_paused():
       vc.stop()
@@ -126,20 +127,35 @@ async def play(ctx, *, query: str):
       await ctx.send(f'❌ خطأ أثناء تشغيل الملف المحلي: {e}')
     return
 
-  # إذا كان إدخال المستخدم رابطاً أو كلمة بحث
+  # التشغيل من رابط أو عبر البحث
   await ctx.send('🔍 جاري البحث وجلب الصوت...')
   loop = asyncio.get_event_loop()
+
   try:
     data = await loop.run_in_executor(
         None, lambda: ytdl.extract_info(query, download=False)
     )
+
+    if not data:
+      await ctx.send('❌ لم يتم العثور على نتائج!')
+      return
+
     if 'entries' in data and len(data['entries']) > 0:
       data = data['entries'][0]
 
-    source_url = data['url']
+    source_url = data.get('url')
     title = data.get('title', 'صوت من الإنترنت')
+
   except Exception as e:
-    await ctx.send(f'❌ حدث خطأ أثناء البحث: {e}')
+    # حماية الكود من الإغلاق التلقائي عند مواجهة Cloudflare أو حظر IP
+    await ctx.send(
+        '❌ تعذر جلب المقطع بسبب حماية الموقع (Cloudflare/Bot Block).\n'
+        '💡 **حلول مجربة:**\n'
+        '1. جرب البحث باسم المقطع بدل وضع الرابط المباشر.\n'
+        '2. جرب رابط من SoundCloud.\n'
+        '3. ارفع الملف الصوتي كملف محلي على GitHub.'
+    )
+    print(f'Extraction Error: {e}')
     return
 
   if vc.is_playing() or vc.is_paused():
