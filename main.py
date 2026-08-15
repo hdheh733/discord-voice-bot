@@ -28,7 +28,7 @@ def keep_alive():
 
 keep_alive()
 
-# --- إعدادات البوت ---
+# --- إعدادات البوت والبادئة (Prefix) ---
 TOKEN = os.environ.get('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
@@ -37,7 +37,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-# إعدادات متقدمة لتجاوز حظر يوتيوب باستخدام iOS client
+# إعدادات YTDL بعد التعديل والتنظيف
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -45,10 +45,9 @@ YTDL_OPTIONS = {
     'default_search': 'ytsearch',
     'source_address': '0.0.0.0',
     'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'no_warnings': True,
-    'extractor_args': {'youtube': {'player_client': ['ios', 'mweb']}},
+    'user_agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    ),
 }
 
 FFMPEG_OPTIONS = {
@@ -67,7 +66,7 @@ async def on_ready():
   print('Bot is ready and online!')
 
 
-# --- أمر قائمة الأوامر ---
+# --- أمر عرض قائمة الأوامر في الشات ---
 @bot.command(name='help', aliases=['اوامر', 'الأوامر', 'commands'])
 async def help_command(ctx):
   embed = discord.Embed(
@@ -75,6 +74,7 @@ async def help_command(ctx):
       description='استخدم الرمز **`>`** قبل كل أمر:',
       color=discord.Color.blue(),
   )
+
   embed.add_field(
       name='▶️ `>play <الرابط أو الاسم>`',
       value='تشغيل مقطع من اليوتيوب، الساوند كلاود، أو ملف محلي.',
@@ -95,11 +95,13 @@ async def help_command(ctx):
   embed.add_field(
       name='📜 `>help`', value='عرض هذه القائمة من جديد.', inline=False
   )
+
   embed.set_footer(text='عمل البوت مستمر 24/7 بدون توقف 🚀')
+
   await ctx.send(embed=embed)
 
 
-# --- أمر التشغيل ---
+# --- 1. أمر التشغيل (للملفات المحلية أو الصوت عبر الإنترنت) ---
 @bot.command()
 async def play(ctx, *, query: str):
   if not ctx.author.voice:
@@ -113,7 +115,7 @@ async def play(ctx, *, query: str):
   else:
     vc = ctx.voice_client
 
-  # 1. إذا كان المدخل ملفاً محلياً موجوداً في مشروعك
+  # إذا كان إدخال المستخدم اسم ملف محلي موجود بمجلد البوت
   if os.path.exists(query):
     if vc.is_playing() or vc.is_paused():
       vc.stop()
@@ -121,10 +123,10 @@ async def play(ctx, *, query: str):
       vc.play(discord.FFmpegPCMAudio(query))
       await ctx.send(f'🎵 جاري تشغيل الملف المحلي: **{query}**')
     except Exception as e:
-      await ctx.send(f'❌ خطأ في تشغيل الملف المحلي: {e}')
+      await ctx.send(f'❌ خطأ أثناء تشغيل الملف المحلي: {e}')
     return
 
-  # 2. إذا كان المدخل رابطاً أو بحثاً عبر الإنترنت
+  # إذا كان إدخال المستخدم رابطاً أو كلمة بحث
   await ctx.send('🔍 جاري البحث وجلب الصوت...')
   loop = asyncio.get_event_loop()
   try:
@@ -137,10 +139,7 @@ async def play(ctx, *, query: str):
     source_url = data['url']
     title = data.get('title', 'صوت من الإنترنت')
   except Exception as e:
-    await ctx.send(
-        f'❌ حدث خطأ أثناء جلب المقطع. جرب كتابة اسم المقطع بدلاً من الرابط، أو'
-        f' استخدم ساوند كلاود.\nالتفاصيل: {e}'
-    )
+    await ctx.send(f'❌ حدث خطأ أثناء البحث: {e}')
     return
 
   if vc.is_playing() or vc.is_paused():
@@ -151,10 +150,10 @@ async def play(ctx, *, query: str):
     vc.play(player)
     await ctx.send(f'🎵 جاري تشغيل: **{title}**')
   except Exception as e:
-    await ctx.send(f'❌ خطأ أثناء تشغيل الصوت: {e}')
+    await ctx.send(f'❌ خطأ في تشغيل الصوت: {e}')
 
 
-# --- الأوامر الأخرى ---
+# --- 2. أمر الإيقاف المؤقت ---
 @bot.command()
 async def pause(ctx):
   if ctx.voice_client and ctx.voice_client.is_playing():
@@ -164,6 +163,7 @@ async def pause(ctx):
     await ctx.send('❌ لا يوجد صوت قيد التشغيل حالياً!')
 
 
+# --- 3. أمر الاستئناف ---
 @bot.command()
 async def resume(ctx):
   if ctx.voice_client and ctx.voice_client.is_paused():
@@ -173,6 +173,7 @@ async def resume(ctx):
     await ctx.send('❌ الصوت ليس متوقفاً مؤقتاً!')
 
 
+# --- 4. أمر الإيقاف التام ---
 @bot.command()
 async def stop(ctx):
   if ctx.voice_client and (
@@ -184,6 +185,7 @@ async def stop(ctx):
     await ctx.send('❌ لا يوجد صوت قيد التشغيل.')
 
 
+# --- 5. أمر الخروج ---
 @bot.command()
 async def leave(ctx):
   if ctx.voice_client:
