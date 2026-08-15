@@ -1,30 +1,23 @@
 import asyncio
 import os
 import sys
-from threading import Thread
 import discord
 from discord.ext import commands
-from flask import Flask
+from aiohttp import web
 
-# --- سيرفر الويب الخلفي للمحافظة على الاتصال ---
-app = Flask(__name__)
+# --- سيرفر خفيف لـ Port Binding الخاص بـ Render ---
+async def handle(request):
+    return web.Response(text="Bot is running 24/7!")
 
-
-@app.route('/')
-def home():
-  return 'Bot is online and active 24/7!'
-
-
-def run_web_server():
-  port = int(os.environ.get('PORT', 8080))
-  # استخدام 0.0.0.0 أساسي للاستجابة لفحص الصحة من Render
-  app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-
-
-# تشغيل سيرفر الويب في Thread منفصل تماماً
-server_thread = Thread(target=run_web_server)
-server_thread.daemon = True
-server_thread.start()
+async def start_background_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"Web server successfully bound to port {port}")
 
 # --- إعدادات البوت ---
 TOKEN = os.environ.get('DISCORD_TOKEN')
@@ -35,77 +28,50 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-
 @bot.event
 async def on_ready():
-  print(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
-  print('Ready and listening for commands!')
-
-
-@bot.command(name='help', aliases=['اوامر', 'الأوامر'])
-async def help_command(ctx):
-  embed = discord.Embed(
-      title='🎵 قائمة أوامر بوت الصوت',
-      description='استخدم الرمز **`>`** قبل كل أمر:',
-      color=discord.Color.blue(),
-  )
-  embed.add_field(
-      name='▶️ `>play <الاسم أو الرابط>`',
-      value='تشغيل صوت من يوتيوب/ساوند كلاود أو ملف محلي.',
-      inline=False,
-  )
-  embed.add_field(
-      name='⏹️ `>stop`', value='إيقاف التشغيل تماماً.', inline=False
-  )
-  embed.add_field(
-      name='👋 `>leave`', value='إخراج البوت من الروم.', inline=False
-  )
-  await ctx.send(embed=embed)
-
+    print(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
 
 @bot.command()
 async def play(ctx, *, query: str):
-  if not ctx.author.voice:
-    await ctx.send('❌ يجب أن تكون في روم صوتي أولاً!')
-    return
+    if not ctx.author.voice:
+        await ctx.send("❌ يجب أن تكون في روم صوتي أولاً!")
+        return
 
-  channel = ctx.author.voice.channel
-  vc = ctx.voice_client if ctx.voice_client else await channel.connect()
+    channel = ctx.author.voice.channel
+    vc = ctx.voice_client if ctx.voice_client else await channel.connect()
 
-  # تشغيل الملفات المحلية المرفوعة للمشروع
-  if os.path.exists(query):
-    if vc.is_playing():
-      vc.stop()
-    try:
-      vc.play(discord.FFmpegPCMAudio(query))
-      await ctx.send(f'🎵 جاري تشغيل الملف: **{query}**')
-    except Exception as e:
-      await ctx.send(f'❌ خطأ في التشغيل: {e}')
-    return
+    # تشغيل من ملف محلي موجود في المشروع لتفادي Cloudflare
+    if os.path.exists(query):
+        if vc.is_playing():
+            vc.stop()
+        try:
+            vc.play(discord.FFmpegPCMAudio(query))
+            await ctx.send(f"🎵 جاري تشغيل: **{query}**")
+        except Exception as e:
+            await ctx.send(f"❌ خطأ تشغيل: {e}")
+        return
 
-  await ctx.send(
-      '💡 لتشغيل الأغاني بدقة وبدون حظر الـ IP، ارفع ملف `.mp3` إلى GitHub واستخدم'
-      ' اسمه.'
-  )
-
+    await ctx.send("⚠️ روابط يوتيوب المباشرة محظورة من السيرفر. قم برفع ملف MP3 إلى GitHub واستخدم اسمه.")
 
 @bot.command()
 async def stop(ctx):
-  if ctx.voice_client and ctx.voice_client.is_playing():
-    ctx.voice_client.stop()
-    await ctx.send('⏹️ تم الإيقاف.')
-
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+        await ctx.send("⏹️ تم الإيقاف.")
 
 @bot.command()
 async def leave(ctx):
-  if ctx.voice_client:
-    await ctx.voice_client.disconnect()
-    await ctx.send('👋 تم المغادرة.')
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("👋 تم المغادرة.")
 
+async def main():
+    await start_background_web_server()
+    if not TOKEN:
+        print("CRITICAL: DISCORD_TOKEN is missing!")
+        sys.exit(1)
+    await bot.start(TOKEN)
 
-# التشغيل المباشر مع التحقق من التوكن
 if __name__ == '__main__':
-  if not TOKEN:
-    print('CRITICAL ERROR: DISCORD_TOKEN Environment Variable is missing!')
-    sys.exit(1)
-  bot.run(TOKEN)
+    asyncio.run(main())
