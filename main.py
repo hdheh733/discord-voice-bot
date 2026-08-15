@@ -7,8 +7,12 @@ from flask import Flask
 import imageio_ffmpeg
 import yt_dlp
 
-# جلب المسار المباشر لبرنامج ffmpeg المدمج
-FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+# --- تحديد مسار FFmpeg المدمج ---
+try:
+  FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception as e:
+  print(f'Error getting FFmpeg executable: {e}')
+  FFMPEG_PATH = 'ffmpeg'
 
 # --- سيرفر الويب الخلفي لإبقاء البوت متصلاً 24/7 ---
 app = Flask('')
@@ -41,6 +45,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
+# إعدادات YTDL المباشرة
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -117,7 +122,7 @@ async def play(ctx, *, query: str):
   else:
     vc = ctx.voice_client
 
-  # 1. التشغيل من ملف محلي موجود بمجلد المشروع
+  # 1. التشغيل من ملف محلي
   if os.path.exists(query):
     if vc.is_playing() or vc.is_paused():
       vc.stop()
@@ -129,7 +134,7 @@ async def play(ctx, *, query: str):
       await ctx.send(f'❌ خطأ أثناء تشغيل الملف المحلي: {e}')
     return
 
-  # 2. التشغيل من رابط أو عبر البحث
+  # 2. التشغيل عبر الويب
   await ctx.send('🔍 جاري البحث وجلب الصوت...')
   loop = asyncio.get_event_loop()
 
@@ -150,9 +155,9 @@ async def play(ctx, *, query: str):
 
   except Exception as e:
     await ctx.send(
-        '❌ تعذر جلب المقطع بسبب حماية الموقع (Cloudflare/Bot Block).\n'
-        '💡 **جرّب:** البحث باسم المقطع أو استخدام رابط SoundCloud أو ملف'
-        ' محلي.'
+        '❌ تعذر جلب المقطع بسبب حظر الـ IP في سيرفرات Cloud.\n'
+        '💡 **جرّب:** التشغيل من SoundCloud أو استخدام ملف محلي مرفوع على'
+        ' GitHub.'
     )
     print(f'Extraction Error: {e}')
     return
@@ -170,7 +175,7 @@ async def play(ctx, *, query: str):
     await ctx.send(f'❌ خطأ في تشغيل الصوت: {e}')
 
 
-# --- الأوامر الأساسية الأُخرى ---
+# --- الأوامر الأساسية ---
 @bot.command()
 async def pause(ctx):
   if ctx.voice_client and ctx.voice_client.is_playing():
