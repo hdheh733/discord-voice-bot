@@ -1,5 +1,5 @@
-discord.py
+discord.py[voice]
 PyNaCl
 Flask
 yt-dlp
-davey
+gunicorn
