@@ -1,5 +1,3 @@
 discord.py[voice]
 PyNaCl
-Flask
-yt-dlp
-gunicorn
+aiohttp
