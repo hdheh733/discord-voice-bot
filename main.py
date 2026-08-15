@@ -4,15 +4,7 @@ from threading import Thread
 import discord
 from discord.ext import commands
 from flask import Flask
-import imageio_ffmpeg
 import yt_dlp
-
-# --- تحديد مسار FFmpeg المدمج ---
-try:
-  FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
-except Exception as e:
-  print(f'Error getting FFmpeg executable: {e}')
-  FFMPEG_PATH = 'ffmpeg'
 
 # --- سيرفر الويب الخلفي لإبقاء البوت متصلاً 24/7 ---
 app = Flask('')
@@ -45,7 +37,6 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='>', intents=intents, help_command=None)
 
-# إعدادات YTDL المباشرة
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -72,7 +63,6 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 @bot.event
 async def on_ready():
   print(f'Logged in as {bot.user.name} ({bot.user.id})')
-  print(f'FFmpeg Path: {FFMPEG_PATH}')
   print('Bot is ready and online!')
 
 
@@ -127,8 +117,7 @@ async def play(ctx, *, query: str):
     if vc.is_playing() or vc.is_paused():
       vc.stop()
     try:
-      player = discord.FFmpegPCMAudio(query, executable=FFMPEG_PATH)
-      vc.play(player)
+      vc.play(discord.FFmpegPCMAudio(query))
       await ctx.send(f'🎵 جاري تشغيل الملف المحلي: **{query}**')
     except Exception as e:
       await ctx.send(f'❌ خطأ أثناء تشغيل الملف المحلي: {e}')
@@ -166,9 +155,7 @@ async def play(ctx, *, query: str):
     vc.stop()
 
   try:
-    player = discord.FFmpegPCMAudio(
-        source_url, executable=FFMPEG_PATH, **FFMPEG_OPTIONS
-    )
+    player = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
     vc.play(player)
     await ctx.send(f'🎵 جاري تشغيل: **{title}**')
   except Exception as e:
